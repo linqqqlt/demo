@@ -603,43 +603,62 @@ system-auth write ad au-team.irpo AU-TEAM BR-SRV.au-team.irpo administrator P@ss
 
 ### 2. RAID 0 на HQ-SRV
 
+### Создание RAID 5 на HQ-SRV
+
 ```bash
-mdadm --create /dev/md/md0 --level=0 --raid-devices=2 /dev/sdb /dev/sdc
-mkfs.ext4 /dev/md/md0
-mdadm --detail --scan >> /etc/mdadm.conf
-mkdir -p /raid
-echo "/dev/md/md0  /raid  ext4  defaults  0  0" >> /etc/fstab
-mount -a
+mdadm --create --level=5 --raid-devices=3 /dev/md/md0 /dev/sdb /dev/sdc /dev/sdd
+mkfs -t ext4 /dev/md/md0
 ```
 
----
+### Монтирование RAID массива
 
-### 3. NFS на HQ-SRV
+Файл: `/etc/fstab`
+```
+/dev/md/md0    /raid5    ext4    defaults    0    0
+```
 
-**Сервер:**
 ```bash
-apt-get install nfs-kernel-server -y
-mkdir -p /raid/nfs
-chown nobody:nogroup /raid/nfs
-chmod 777 /raid/nfs
+mkdir -p /raid5
+mount -a
+systemctl daemon-reload
+```
 
-cat > /etc/exports << EOF
-/raid/nfs 192.168.100.0/24(rw,sync,no_subtree_check,no_root_squash)
-EOF
+### 3. Настройка NFS сервера
 
+```bash
+apt-get update
+apt-get install nfs-kernel-server
+
+mkdir -p /raid5/nfs
+chown nobody:nogroup /raid5/nfs
+chmod 777 /raid5/nfs
+```
+
+**Конфигурация экспорта:**
+
+Файл: `/etc/exports`
+```
+/raid5/nfs 192.168.200.0/28(rw,sync,no_subtree_check,no_root_squash)
+```
+
+```bash
 exportfs -a
-systemctl enable --now nfs-kernel-server
+systemctl start nfs-kernel-server
+systemctl enable nfs-kernel-server
 ```
 
-**Клиент (HQ-CLI):**
+### Автомонтирование на HQ-CLI
+
 ```bash
-apt-get install nfs-common -y
+apt-get install nfs-common
 mkdir -p /mnt/nfs
-echo "192.168.100.2:/raid/nfs  /mnt/nfs  nfs  defaults  0  0" >> /etc/fstab
-mount -a
+mount 192.168.100.10:/raid5/nfs /mnt/nfs
 ```
 
----
+Файл: `/etc/fstab`
+```
+192.168.100.10:/raid5/nfs    /mnt/nfs    nfs    defaults    0    0
+```
 
 ### 4. Chrony (NTP)
 
